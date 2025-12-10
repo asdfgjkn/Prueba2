@@ -1,74 +1,75 @@
 package com.example.prueba2;
 
-import android.annotation.SuppressLint;
-import android.content.Context;
 import android.content.Intent;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteStatement;
 import android.os.Bundle;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
+
+import androidx.activity.EdgeToEdge;
 import androidx.appcompat.app.AppCompatActivity;
+
+import com.google.firebase.firestore.CollectionReference;
+import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.FirebaseFirestore;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class AgregarActivity extends AppCompatActivity {
 
+    EditText inputNombre, inputApellidos, inputEdad;
+    Button btnGuardar;
 
-        private SQLiteDatabase db;
-        private EditText txtNombre, txtApellidos, txtEdad;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        EdgeToEdge.enable(this);
+        setContentView(R.layout.activity_agregar);
 
-        @Override
-        protected void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            setContentView(R.layout.activity_agregar);
+        // Vincular vistas
+        inputNombre = findViewById(R.id.input_nombre);
+        inputApellidos = findViewById(R.id.input_apellidos);
+        inputEdad = findViewById(R.id.input_edad);
+        btnGuardar = findViewById(R.id.botonGuardar);
 
-            db = openOrCreateDatabase("BD_ESTUDIANTES", Context.MODE_PRIVATE, null);
-            db.execSQL("CREATE TABLE IF NOT EXISTS ESTUDIANTES (" +
-                    "ID INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "NOMBRE TEXT," +
-                    "APELLIDOS TEXT," +
-                    "EDAD INTEGER)");
+        btnGuardar.setOnClickListener(v -> {
 
-            txtNombre = findViewById(R.id.input_nombre);
-            txtApellidos = findViewById(R.id.input_apellidos);
-            txtEdad = findViewById(R.id.input_edad);
+            EditText input_nombre = findViewById(R.id.input_nombre);
+            EditText input_apellidos = findViewById(R.id.input_apellidos);
+            EditText input_edad = findViewById(R.id.input_edad);
 
-            Button botonGuardar = findViewById(R.id.botonGuardar);
-            botonGuardar.setOnClickListener(v -> insertarEstudiante());
-        }
+            String nombre = input_nombre.getText().toString().trim();
+            String apellido = input_apellidos.getText().toString().trim();
+            String edad = input_edad.getText().toString().trim();
 
-        private void insertarEstudiante() {
-
-            String nombre = txtNombre.getText().toString().trim();
-            String apellidos = txtApellidos.getText().toString().trim();
-            String edadTexto = txtEdad.getText().toString().trim();
-
-            if (nombre.isEmpty() || apellidos.isEmpty() || edadTexto.isEmpty()) {
-                Toast.makeText(this, "Completa todos los campos", Toast.LENGTH_SHORT).show();
+            if (nombre.isEmpty() || apellido.isEmpty() || edad.isEmpty()) {
+                Toast.makeText(this, "Complete todos los campos", Toast.LENGTH_SHORT).show();
                 return;
             }
 
-            int edad = Integer.parseInt(edadTexto);
+            FirebaseFirestore db = FirebaseFirestore.getInstance();
 
-            try {
-                String sql = "INSERT INTO ESTUDIANTES (NOMBRE, APELLIDOS, EDAD) VALUES (?, ?, ?)";
-                SQLiteStatement st = db.compileStatement(sql);
+            String id = db.collection("estudiantes").document().getId();
 
-                st.bindString(1, nombre);
-                st.bindString(2, apellidos);
-                st.bindLong(3, edad);
+            Map<String, Object> data = new HashMap<>();
+            data.put("ID", id);
+            data.put("NOMBRE", nombre);
+            data.put("APELLIDOS", apellido);
+            data.put("EDAD", Integer.parseInt(edad));
 
-                st.executeInsert();
+            db.collection("estudiantes")
+                    .document(id)
+                    .set(data)
+                    .addOnSuccessListener(a -> {
+                        Toast.makeText(this, "Guardado correctamente", Toast.LENGTH_SHORT).show();
+                        finish();
+                    })
+                    .addOnFailureListener(e ->
+                            Toast.makeText(this, "Error al guardar", Toast.LENGTH_SHORT).show());
+        });
 
-                Toast.makeText(this, "Estudiante agregado", Toast.LENGTH_SHORT).show();
 
-                // Volver a ListarActivity
-                startActivity(new Intent(AgregarActivity.this, ListarActivity.class));
-                finish();
-
-            } catch (Exception e) {
-                Toast.makeText(this, "Error al insertar", Toast.LENGTH_SHORT).show();
-            }
-        }
-
+    }
 }

@@ -1,121 +1,118 @@
 package com.example.prueba2;
 
+
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.Context;
 import android.content.Intent;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
 import android.widget.Toast;
 
-import java.util.ArrayList;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.firestore.DocumentSnapshot;
+import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.QuerySnapshot;
 
+import java.util.ArrayList;
 
 public class ListarActivity extends AppCompatActivity {
 
+    private static final String TAG = "ListarActivity";
 
-        private static final String TAG = "ListarActivity";
+    private ListView listView;
+    private Button botonAgregar;
+    private ArrayList<String> listaEstudiantes;
+    private ArrayList<String> listaIDs;  // ahora IDs son String (Firebase)
 
-        private ListView listView;
-        private Button botonAgregar;
-        private ArrayList<String> listaEstudiantes;
-        private ArrayList<Integer> listaIDs;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_listar);
 
-        @Override
-        protected void onCreate(Bundle savedInstanceState) {
-            super.onCreate(savedInstanceState);
-            setContentView(R.layout.activity_listar); // asegúrate que este es el nombre correcto
+        listView = findViewById(R.id.lista_estudiantes);
+        botonAgregar = findViewById(R.id.boton_agregar);
 
-            listView = findViewById(R.id.lista_estudiantes); // ID debe coincidir con tu XML
-            botonAgregar = findViewById(R.id.boton_agregar); // si existe en tu XML
+        botonAgregar.setOnClickListener(v -> {
+            Intent intent = new Intent(ListarActivity.this, AgregarActivity.class);
+            startActivity(intent);
+        });
 
-            // Botón para ir a AgregarActivity
-            botonAgregar.setOnClickListener(v -> {
-                Intent intent = new Intent(ListarActivity.this, AgregarActivity.class);
-                startActivity(intent);
-            });
+        listaEstudiantes = new ArrayList<>();
+        listaIDs = new ArrayList<>();
 
-            // Inicializar listas
-            listaEstudiantes = new ArrayList<>();
-            listaIDs = new ArrayList<>();
-
-            // Primera carga
-            cargarLista();
-        }
-
-        // Se vuelve a cargar al volver a la Activity
-        @Override
-        protected void onResume() {
-            super.onResume();
-            cargarLista();
-        }
-
-        // Método seguro para cargar datos desde SQLite
-        private void cargarLista() {
-            listaEstudiantes.clear();
-            listaIDs.clear();
-
-            SQLiteDatabase db = null;
-            Cursor c = null;
-
-            try {
-                // Abrir base de datos (debe haberse creado antes en MainActivity)
-                db = openOrCreateDatabase("BD_ESTUDIANTES", MODE_PRIVATE, null);
-
-                // Asegurarse de que la tabla exista (opcional, evita crash)
-                db.execSQL("CREATE TABLE IF NOT EXISTS ESTUDIANTES (ID INTEGER PRIMARY KEY AUTOINCREMENT, NOMBRE TEXT, APELLIDOS TEXT, EDAD INTEGER)");
-
-                // Ejecutar consulta
-                c = db.rawQuery("SELECT ID, NOMBRE, APELLIDOS, EDAD FROM ESTUDIANTES", null);
-
-                if (c != null && c.moveToFirst()) {
-                    do {
-                        int id = c.getInt(0);
-                        String nombre = c.getString(1);
-                        String apellidos = c.getString(2);
-                        int edad = c.getInt(3);
-
-                        listaIDs.add(id);
-                        listaEstudiantes.add(nombre + " " + apellidos + " — Edad: " + edad);
-                    } while (c.moveToNext());
-                } else {
-                    // Si no hay datos, mostrar mensaje opcional
-                    Toast.makeText(this, "No hay estudiantes registrados", Toast.LENGTH_SHORT).show();
-                }
-
-            } catch (Exception ex) {
-                Log.e(TAG, "Error cargando lista: " + ex.getMessage(), ex);
-                Toast.makeText(this, "Error al leer la base de datos", Toast.LENGTH_LONG).show();
-            } finally {
-                // Cerrar cursor y BD si existen
-                if (c != null && !c.isClosed()) c.close();
-                if (db != null && db.isOpen()) db.close();
-            }
-
-            // Actualizar adaptador (aunque la lista esté vacía)
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(
-                    this,
-                    android.R.layout.simple_list_item_1,
-                    listaEstudiantes
-            );
-            listView.setAdapter(adapter);
-
-            // Listener para abrir VerActivity al hacer click
-            listView.setOnItemClickListener((parent, view, position, id) -> {
-                if (position >= 0 && position < listaIDs.size()) {
-                    int idSeleccionado = listaIDs.get(position);
-                    Intent intent = new Intent(ListarActivity.this, VerActivity.class);
-                    intent.putExtra("ID", idSeleccionado);
-                    startActivity(intent);
-                }
-            });
-        }
+        cargarLista();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        cargarLista();
+    }
+
+    private void cargarLista() {
+
+        listaEstudiantes.clear();
+        listaIDs.clear();
+
+        FirebaseFirestore db = FirebaseFirestore.getInstance();
+
+        db.collection("estudiantes")
+                .get()
+                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+                    @Override
+                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                        if (task.isSuccessful()) {
+
+                            QuerySnapshot documentos = task.getResult();
+
+                            if (documentos.isEmpty()) {
+                                Toast.makeText(ListarActivity.this, "No hay estudiantes registrados", Toast.LENGTH_SHORT).show();
+                            } else {
+
+                                for (DocumentSnapshot doc : documentos) {
+
+                                    String id = doc.getId(); // ID del documento
+                                    String nombre = doc.getString("NOMBRE");
+                                    String apellido = doc.getString("APELLIDOS");
+                                    int edad = doc.getLong("EDAD").intValue();
+
+                                    listaIDs.add(id);
+                                    listaEstudiantes.add(nombre + " " + apellido + " — Edad: " + edad);
+                                }
+                            }
+
+                            actualizarListView();
+
+                        } else {
+                            Log.e(TAG, "Error cargando datos Firebase", task.getException());
+                            Toast.makeText(ListarActivity.this, "Error al cargar datos", Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+    }
+
+    private void actualizarListView() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_list_item_1,
+                listaEstudiantes
+        );
+        listView.setAdapter(adapter);
+
+        listView.setOnItemClickListener((parent, view, position, id) -> {
+            if (position >= 0 && position < listaIDs.size()) {
+
+                String idSeleccionado = listaIDs.get(position);
+
+                Intent intent = new Intent(ListarActivity.this, VerActivity.class);
+                intent.putExtra("ID", idSeleccionado);
+                startActivity(intent);
+            }
+        });
+    }
+}
